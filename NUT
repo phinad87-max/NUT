@@ -1,0 +1,99 @@
+-- ==========================================
+-- SCRIPT: Egg Teleport & Target Collector
+-- ==========================================
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+
+-- สร้างหน้าต่าง UI แบบง่ายๆ เพื่อแสดงรายการไข่
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
+local Window = OrionLib:MakeWindow({Name = "Egg Collector Hub", HidePremium = false, SaveConfig = true})
+
+local Tab = Window:MakeTab({Name = "เลือกไข่", Icon = "rbxassetid://4483345998", PremiumOnly = false})
+
+local EggDropdown
+local SelectedEgg = nil
+getgenv().IsCollecting = false
+
+-- ฟังก์ชันดึงรายชื่อไข่ทั้งหมดในเซิร์ฟเวอร์
+local function GetEggs()
+    local eggList = {}
+    -- เปลี่ยนคำว่า "Eggs" เป็นชื่อโฟลเดอร์เก็บไข่ในแมพนั้นๆ
+    if Workspace:FindFirstChild("Eggs") then
+        for _, egg in pairs(Workspace.Eggs:GetChildren()) do
+            table.insert(eggList, egg.Name)
+        end
+    end
+    if #eggList == 0 then table.insert(eggList, "ไม่พบไข่ในแมพ") end
+    return eggList
+end
+
+-- ฟังก์ชันบินและมุดดินไปเก็บไข่
+local function TeleportToEgg(targetEgg)
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = LocalPlayer.Character.HumanoidRootPart
+
+    -- 1. บินไปหาไข่
+    local targetPart = targetEgg:IsA("Model") and targetEgg.PrimaryPart or targetEgg:FindFirstChildWhichIsA("BasePart")
+    if targetPart then
+        -- ทำให้ตัวละครไม่ติดแรงโน้มถ่วงขณะบิน
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+        end
+
+        -- เคลื่อนที่ไปหาไข่
+        hrp.CFrame = targetPart.CFrame + Vector3.new(0, 3, 0)
+        task.wait(0.5)
+
+        -- 2. เหาะลงดิน (มุดลงใต้พื้น)
+        hrp.CFrame = hrp.CFrame - Vector3.new(0, 15, 0)
+        print("[EggCollector]: เก็บไข่สำเร็จและมุดดินเรียบร้อย!")
+    end
+end
+
+-- เพิ่ม Dropdown เลือกไข่ใน UI
+EggDropdown = Tab:AddDropdown({
+    Name = "เลือกไข่ที่ต้องการเก็บ (1 ฟอง)",
+    Default = "",
+    Options = GetEggs(),
+    Callback = function(Value)
+        SelectedEgg = Value
+    end
+})
+
+-- ปุ่มรีเฟรชรายชื่อไข่
+Tab:AddButton({
+    Name = "รีเฟรชรายชื่อไข่",
+    Callback = function()
+        EggDropdown:Refresh(GetEggs(), true)
+    end
+})
+
+-- ปุ่มเปิด-ปิดการทำงานวนลูปเก็บไข่เป้าหมาย
+Tab:AddToggle({
+    Name = "เริ่มเก็บไข่ที่เลือก (วนลูปเรื่อยๆ)",
+    Default = false,
+    Callback = function(Value)
+        getgenv().IsCollecting = Value
+        
+        spawn(function()
+            while getgenv().IsCollecting do
+                pcall(function()
+                    if SelectedEgg and Workspace:FindFirstChild("Eggs") then
+                        for _, egg in pairs(Workspace.Eggs:GetChildren()) do
+                            if egg.Name == SelectedEgg then
+                                TeleportToEgg(egg)
+                                break
+                            end
+                        end
+                    end
+                end)
+                task.wait(2) -- ดีเลย์เวลาก่อนวนไปเช็คและเก็บใหม่
+            end
+        end)
+    end
+})
+
+OrionLib:Init()
